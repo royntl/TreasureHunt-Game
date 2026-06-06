@@ -4,97 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>חפש את המטמון</title>
-    <!-- ספריית סורק הברקודים -->
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f4f8;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            color: #333;
-        }
-        h1 {
-            color: #2c3e50;
-        }
-        .container {
-            background: white;
-            border-radius: 15px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 400px;
-            margin-top: 20px;
-        }
-        .riddle-box {
-            background: #eef2f5;
-            border-right: 5px solid #3498db;
-            padding: 15px;
-            font-size: 1.2em;
-            margin: 20px 0;
-            border-radius: 5px;
-            min-height: 80px;
-        }
-        button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 1.1em;
-            border-radius: 50px;
-            cursor: pointer;
-            width: 100%;
-            font-weight: bold;
-            margin-top: 10px;
-        }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #f0f4f8; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; color: #333; }
+        h1 { color: #2c3e50; }
+        .container { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; margin-top: 20px; }
+        .riddle-box { background: #eef2f5; border-right: 5px solid #3498db; padding: 15px; font-size: 1.2em; margin: 20px 0; border-radius: 5px; min-height: 80px; }
+        button { background-color: #3498db; color: white; border: none; padding: 15px 30px; font-size: 1.1em; border-radius: 50px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
         button:hover { background-color: #2980b9; }
-        #reader {
-            width: 100%;
-            margin-top: 20px;
-            border-radius: 10px;
-            overflow: hidden;
-            display: none;
-        }
-        .progress {
-            font-size: 0.9em;
-            color: #7f8c8d;
-            margin-bottom: 10px;
-        }
-        .reset-btn {
-            background-color: #e74c3c;
-            margin-top: 30px;
-            font-size: 0.9em;
-            padding: 10px;
-            width: auto;
-        }
+        input[type="text"] { width: 90%; padding: 15px; font-size: 1.1em; border: 2px solid #bdc3c7; border-radius: 10px; margin-bottom: 15px; text-align: center; box-sizing: border-box; }
+        #reader { width: 100%; margin-top: 20px; border-radius: 10px; overflow: hidden; display: none; }
+        .progress { font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px; }
+        .reset-btn { background-color: #e74c3c; margin-top: 30px; font-size: 0.9em; padding: 10px; width: auto; }
+        #gameScreen { display: none; } /* מוסתר בהתחלה */
     </style>
 </head>
 <body>
 
     <h1>חפש את המטמון 🗺️</h1>
     
-    <div class="container">
-        <div class="progress" id="progressText">תחנה 1 מתוך 8</div>
-        
-        <div class="riddle-box" id="riddleText">
-            טוען את החידה...
-        </div>
+    <div class="container" id="welcomeScreen">
+        <h2>ברוכים הבאים!</h2>
+        <p>הכניסו את השם שלכם כדי להתחיל:</p>
+        <input type="text" id="playerNameInput" placeholder="לדוגמה: נטלי והבנות">
+        <button onclick="startGame()">התחל משחק!</button>
+    </div>
 
+    <div class="container" id="gameScreen">
+        <div class="progress" id="progressText">תחנה 1 מתוך 8</div>
+        <div class="riddle-box" id="riddleText">טוען את החידה...</div>
         <button id="scanBtn" onclick="startScanner()">סרוק את הברקוד שמצאת</button>
-        
-        <!-- כאן תוצג המצלמה -->
         <div id="reader"></div>
     </div>
 
-    <!-- כפתור איפוס למנהל המשחק -->
     <button class="reset-btn" onclick="resetGame()">איפוס המשחק (למנהל)</button>
 
     <script>
-        // הגדרת כל התחנות והחידות
+        // חשוב: הדבק כאן את הקישור שקיבלת מגוגל שיטס (השאר את המרכאות)
+        const GOOGLE_SHEETS_URL = "הדבק_כאן_את_הקישור_שלך";
+
         const stations = [
             { level: 1, code: "station_1", text: "ברוכים הבאים למשחק! החידה הראשונה: הברקוד לחידה הבאה נמצא במקום שבוא מקבלים את המפתחות לחדרים" },
             { level: 2, code: "station_2", text: "כל הכבוד! החידה הבאה: יש לי שם של לוחם אבל אני נמצא בדרך כלל במטבח." },
@@ -108,11 +56,28 @@
         ];
 
         let html5QrcodeScanner;
+        let playerName = localStorage.getItem("treasureName");
 
-        // טעינת מצב המשחק כשהדף עולה
         window.onload = function() {
-            updateUI();
+            if (playerName) {
+                document.getElementById('welcomeScreen').style.display = 'none';
+                document.getElementById('gameScreen').style.display = 'block';
+                updateUI();
+            }
         };
+
+        function startGame() {
+            const inputName = document.getElementById('playerNameInput').value.trim();
+            if (inputName === "") {
+                alert("אנא הכנס שם כדי להמשיך");
+                return;
+            }
+            playerName = inputName;
+            localStorage.setItem("treasureName", playerName);
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'block';
+            updateUI();
+        }
 
         function getCurrentLevel() {
             return parseInt(localStorage.getItem("treasureLevel")) || 1;
@@ -120,68 +85,66 @@
 
         function updateUI() {
             const currentLevel = getCurrentLevel();
-            
             if (currentLevel > 8) {
                 document.getElementById('riddleText').innerHTML = stations[8].text;
                 document.getElementById('progressText').innerText = "המשחק הסתיים!";
                 document.getElementById('scanBtn').style.display = 'none';
                 return;
             }
-
-            const currentStationData = stations[currentLevel - 1];
-            document.getElementById('riddleText').innerText = currentStationData.text;
+            document.getElementById('riddleText').innerText = stations[currentLevel - 1].text;
             document.getElementById('progressText').innerText = `תחנה ${currentLevel} מתוך 8`;
         }
 
         function startScanner() {
             document.getElementById('reader').style.display = 'block';
             document.getElementById('scanBtn').style.display = 'none';
-
-            html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", { fps: 10, qrbox: { width: 250, height: 250 } }
-            );
-            
-            html5QrcodeScanner.render(onScanSuccess, onScanError);
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } });
+            html5QrcodeScanner.render(onScanSuccess, () => {});
         }
 
-        function onScanSuccess(decodedText, decodedResult) {
+        function onScanSuccess(decodedText) {
             const currentLevel = getCurrentLevel();
-            const expectedCode = "station_" + (currentLevel + 1); // מצפים לברקוד של התחנה הבאה
+            const expectedCode = "station_" + (currentLevel + 1); 
 
-            // אם זה הברקוד האחרון שמסיים את המשחק (תחנה 8)
             if (currentLevel === 8 && decodedText === "station_9") {
-                 advanceLevel(currentLevel);
-                 return;
+                finishGame();
+                return;
             }
 
             if (decodedText === expectedCode) {
-                advanceLevel(currentLevel);
+                alert("קוד נכון! עוברים לתחנה הבאה...");
+                localStorage.setItem("treasureLevel", currentLevel + 1);
+                closeScannerAndUpdate();
             } else {
-                alert("אופס! נראה שסרקתם ברקוד של תחנה אחרת או ברקוד שגוי. נסו שוב!");
+                alert("אופס! זה הברקוד הלא נכון. נסו שוב!");
             }
         }
 
-        function advanceLevel(currentLevel) {
-            alert("קוד נכון! עוברים לתחנה הבאה...");
-            localStorage.setItem("treasureLevel", currentLevel + 1);
+        function finishGame() {
+            alert("כל הכבוד! מצאתם את המטמון האחרון!");
+            localStorage.setItem("treasureLevel", 9);
             
-            // עצירת הסורק
+            // שליחת הנתונים לגוגל שיטס
+            if (GOOGLE_SHEETS_URL && GOOGLE_SHEETS_URL.startsWith("http")) {
+                const finalUrl = GOOGLE_SHEETS_URL + "?name=" + encodeURIComponent(playerName);
+                fetch(finalUrl, { mode: 'no-cors' }); // no-cors מונע שגיאות אבטחה בדפדפן
+            }
+            
+            closeScannerAndUpdate();
+        }
+
+        function closeScannerAndUpdate() {
             html5QrcodeScanner.clear().then(() => {
                 document.getElementById('reader').style.display = 'none';
                 document.getElementById('scanBtn').style.display = 'block';
                 updateUI();
-            }).catch(error => {
-                console.error("Failed to clear scanner.", error);
             });
         }
 
-        function onScanError(errorMessage) {
-            // התעלם משגיאות סריקה שוטפות (קורה כשהמצלמה מחפשת ברקוד)
-        }
-
         function resetGame() {
-            if (confirm("האם אתה בטוח שברצונך לאפס את המשחק ולהתחיל מהתחלה?")) {
-                localStorage.setItem("treasureLevel", 1);
+            if (confirm("לאפס את המשחק ולהתחיל מהתחלה?")) {
+                localStorage.removeItem("treasureLevel");
+                localStorage.removeItem("treasureName");
                 location.reload();
             }
         }
