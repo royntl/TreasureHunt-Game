@@ -8,7 +8,7 @@
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #f0f4f8; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; color: #333; }
         h1 { color: #2c3e50; }
-        .container { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; margin-top: 20px; }
+        .container { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; margin-top: 20px; box-sizing: border-box; }
         .riddle-box { background: #eef2f5; border-right: 5px solid #3498db; padding: 15px; font-size: 1.2em; margin: 20px 0; border-radius: 5px; min-height: 80px; }
         button { background-color: #3498db; color: white; border: none; padding: 15px 30px; font-size: 1.1em; border-radius: 50px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
         button:hover { background-color: #2980b9; }
@@ -16,7 +16,16 @@
         #reader { width: 100%; margin-top: 20px; border-radius: 10px; overflow: hidden; display: none; }
         .progress { font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px; }
         .reset-btn { background-color: #e74c3c; margin-top: 30px; font-size: 0.9em; padding: 10px; width: auto; }
-        #gameScreen { display: none; } /* מוסתר בהתחלה */
+        #gameScreen { display: none; }
+        .finish-text { color: #27ae60; font-weight: bold; font-size: 1.3em; margin: 15px 0;}
+        
+        /* עיצוב טבלת המובילים */
+        .leaderboard-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; border-radius: 8px; overflow: hidden; font-size: 0.95em; }
+        .leaderboard-table th, .leaderboard-table td { padding: 10px; border-bottom: 1px solid #eee; text-align: center; }
+        .leaderboard-table th { background-color: #2ecc71; color: white; font-weight: bold; }
+        .leaderboard-table tr:nth-child(even) { background-color: #f9f9f9; }
+        .leaderboard-table tr:last-child td { border-bottom: none; }
+        #leaderboardContainer { margin-top: 15px; max-height: 300px; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -26,8 +35,8 @@
     <div class="container" id="welcomeScreen">
         <h2>ברוכים הבאים!</h2>
         <p>הכניסו את השם שלכם כדי להתחיל:</p>
-        <input type="text" id="playerNameInput" placeholder="לדוגמה: נטלי והבנות">
-        <button onclick="startGame()">התחל משחק!</button>
+        <input type="text" id="playerNameInput" placeholder="הכנס שם...">
+        <button onclick="startGame()">התחל משחק וספור זמן!</button>
     </div>
 
     <div class="container" id="gameScreen">
@@ -40,7 +49,7 @@
     <button class="reset-btn" onclick="resetGame()">איפוס המשחק (למנהל)</button>
 
     <script>
-        // חשוב: הדבק כאן את הקישור שקיבלת מגוגל שיטס (השאר את המרכאות)
+        // הדבק כאן את הקישור שלך מהגוגל שיטס:
         const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbxdk_FZ2zYmzZ_TyXQmFPOXUQlF6sBO4aJ6BDgY-uA-ulgC6qGKDbeL_ZLxRJ-QJD7TjQ/exec";
 
         const stations = [
@@ -74,6 +83,11 @@
             }
             playerName = inputName;
             localStorage.setItem("treasureName", playerName);
+            
+            if (!localStorage.getItem("treasureStartTime")) {
+                localStorage.setItem("treasureStartTime", Date.now());
+            }
+
             document.getElementById('welcomeScreen').style.display = 'none';
             document.getElementById('gameScreen').style.display = 'block';
             updateUI();
@@ -86,13 +100,45 @@
         function updateUI() {
             const currentLevel = getCurrentLevel();
             if (currentLevel > 8) {
-                document.getElementById('riddleText').innerHTML = stations[8].text;
+                const netTimeFormatted = localStorage.getItem("treasureNetTime") || "";
+                let timeDisplay = netTimeFormatted ? `<div class="finish-text">⏱️ זמן הריצה שלכם: ${netTimeFormatted}</div>` : "";
+                
+                document.getElementById('riddleText').innerHTML = stations[8].text + timeDisplay + `<h3>🏆 טבלת המובילים 🏆</h3><div id="leaderboardContainer">טוען טבלה...</div>`;
                 document.getElementById('progressText').innerText = "המשחק הסתיים!";
                 document.getElementById('scanBtn').style.display = 'none';
+                
+                // משיכת טבלת המובילים מגוגל שיטס
+                if (GOOGLE_SHEETS_URL && GOOGLE_SHEETS_URL.startsWith("http")) {
+                    fetch(GOOGLE_SHEETS_URL)
+                    .then(res => res.json())
+                    .then(data => displayLeaderboard(data))
+                    .catch(() => { document.getElementById('leaderboardContainer').innerText = "שגיאה בטעינת הטבלה."; });
+                }
                 return;
             }
             document.getElementById('riddleText').innerText = stations[currentLevel - 1].text;
             document.getElementById('progressText').innerText = `תחנה ${currentLevel} מתוך 8`;
+        }
+
+        function displayLeaderboard(data) {
+            if (!data || data.length === 0) {
+                document.getElementById('leaderboardContainer').innerText = "אין עדיין תוצאות בטבלה.";
+                return;
+            }
+            
+            let html = '<table class="leaderboard-table"><thead><tr><th>שם השחקן</th><th>זמן ריצה נטו</th></tr></thead><tbody>';
+            
+            // הצגת השחקנים לפי סדר הסיום שלהם (האחרון שסיים יופיע למטה)
+            data.forEach(player => {
+                html += `<tr><td>${escapeHtml(player.name)}</td><td>${escapeHtml(player.netTime)}</td></tr>`;
+            });
+            
+            html += '</tbody></table>';
+            document.getElementById('leaderboardContainer').innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            return text.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 
         function startScanner() {
@@ -121,16 +167,34 @@
         }
 
         function finishGame() {
-            alert("כל הכבוד! מצאתם את המטמון האחרון!");
             localStorage.setItem("treasureLevel", 9);
             
-            // שליחת הנתונים לגוגל שיטס
-            if (GOOGLE_SHEETS_URL && GOOGLE_SHEETS_URL.startsWith("http")) {
-                const finalUrl = GOOGLE_SHEETS_URL + "?name=" + encodeURIComponent(playerName);
-                fetch(finalUrl, { mode: 'no-cors' }); // no-cors מונע שגיאות אבטחה בדפדפן
+            const startTime = localStorage.getItem("treasureStartTime");
+            let netTimeFormatted = "לא ידוע";
+            if (startTime) {
+                const diffMs = Date.now() - parseInt(startTime);
+                const minutes = Math.floor(diffMs / 60000);
+                const seconds = Math.floor((diffMs % 60000) / 1000);
+                netTimeFormatted = minutes + " דקות ו-" + seconds + " שניות";
             }
+            localStorage.setItem("treasureNetTime", netTimeFormatted);
             
-            closeScannerAndUpdate();
+            if (GOOGLE_SHEETS_URL && GOOGLE_SHEETS_URL.startsWith("http")) {
+                const finalUrl = GOOGLE_SHEETS_URL + "?name=" + encodeURIComponent(playerName) + "&netTime=" + encodeURIComponent(netTimeFormatted);
+                
+                // שליחה וטעינה מחדש של ה-UI ברגע שהנתונים נשמרו
+                fetch(finalUrl)
+                .then(() => {
+                    alert("כל הכבוד! מצאתם את המטמון האחרון!");
+                    closeScannerAndUpdate();
+                }).catch(() => {
+                    alert("כל הכבוד! מצאתם את המטמון האחרון!");
+                    closeScannerAndUpdate();
+                });
+            } else {
+                alert("כל הכבוד! מצאתם את המטמון האחרון!");
+                closeScannerAndUpdate();
+            }
         }
 
         function closeScannerAndUpdate() {
@@ -142,9 +206,11 @@
         }
 
         function resetGame() {
-            if (confirm("לאפס את המשחק ולהתחיל מהתחלה?")) {
+            if (confirm("לאפס את המשחק ולהתחיל מהתחלה? (זה ימחק גם את התוצאה הנוכחית בטלפון זה)")) {
                 localStorage.removeItem("treasureLevel");
                 localStorage.removeItem("treasureName");
+                localStorage.removeItem("treasureStartTime");
+                localStorage.removeItem("treasureNetTime");
                 location.reload();
             }
         }
