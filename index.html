@@ -66,6 +66,7 @@
 
         let html5QrcodeScanner;
         let playerName = localStorage.getItem("treasureName");
+        let isProcessing = false; // משתנה חסימה למניעת כפילויות סריקה קרובות
 
         window.onload = function() {
             if (playerName) {
@@ -107,7 +108,6 @@
                 document.getElementById('progressText').innerText = "המשחק הסתיים!";
                 document.getElementById('scanBtn').style.display = 'none';
                 
-                // משיכת טבלת המובילים מגוגל שיטס
                 if (GOOGLE_SHEETS_URL && GOOGLE_SHEETS_URL.startsWith("http")) {
                     fetch(GOOGLE_SHEETS_URL)
                     .then(res => res.json())
@@ -127,12 +127,9 @@
             }
             
             let html = '<table class="leaderboard-table"><thead><tr><th>שם השחקן</th><th>זמן ריצה נטו</th></tr></thead><tbody>';
-            
-            // הצגת השחקנים לפי סדר הסיום שלהם (האחרון שסיים יופיע למטה)
             data.forEach(player => {
                 html += `<tr><td>${escapeHtml(player.name)}</td><td>${escapeHtml(player.netTime)}</td></tr>`;
             });
-            
             html += '</tbody></table>';
             document.getElementById('leaderboardContainer').innerHTML = html;
         }
@@ -149,15 +146,20 @@
         }
 
         function onScanSuccess(decodedText) {
+            // אם המערכת כבר באמצע עיבוד של סריקה, נתעלם מהפריים הנוכחי
+            if (isProcessing) return;
+
             const currentLevel = getCurrentLevel();
             const expectedCode = "station_" + (currentLevel + 1); 
 
             if (currentLevel === 8 && decodedText === "station_9") {
+                isProcessing = true; // נעל את הסורק מיד
                 finishGame();
                 return;
             }
 
             if (decodedText === expectedCode) {
+                isProcessing = true; // נעל את הסורק מיד
                 alert("קוד נכון! עוברים לתחנה הבאה...");
                 localStorage.setItem("treasureLevel", currentLevel + 1);
                 closeScannerAndUpdate();
@@ -182,7 +184,6 @@
             if (GOOGLE_SHEETS_URL && GOOGLE_SHEETS_URL.startsWith("http")) {
                 const finalUrl = GOOGLE_SHEETS_URL + "?name=" + encodeURIComponent(playerName) + "&netTime=" + encodeURIComponent(netTimeFormatted);
                 
-                // שליחה וטעינה מחדש של ה-UI ברגע שהנתונים נשמרו
                 fetch(finalUrl)
                 .then(() => {
                     alert("כל הכבוד! מצאתם את המטמון האחרון!");
@@ -201,6 +202,7 @@
             html5QrcodeScanner.clear().then(() => {
                 document.getElementById('reader').style.display = 'none';
                 document.getElementById('scanBtn').style.display = 'block';
+                isProcessing = false; // שחרור הנעילה לתחנה הבאה או למשחק חדש
                 updateUI();
             });
         }
@@ -211,6 +213,7 @@
                 localStorage.removeItem("treasureName");
                 localStorage.removeItem("treasureStartTime");
                 localStorage.removeItem("treasureNetTime");
+                isProcessing = false;
                 location.reload();
             }
         }
